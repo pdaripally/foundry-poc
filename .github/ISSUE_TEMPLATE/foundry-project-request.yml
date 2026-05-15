@@ -53,8 +53,8 @@ body:
     attributes:
       label: Environment
       options:
-        - dev
-        - staging
+        - nonprod
+        - uat
         - prod
       default: 0
     validations:
