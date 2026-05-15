@@ -1,0 +1,348 @@
+name: Provision Foundry Project
+
+# Creates a new Foundry project within an existing Foundry instance.
+# Triggered by workflow_dispatch or by labeling a GitHub Issue with
+# 'provisioning-approved'.
+#
+# What this workflow does:
+#   1. Parses + validates inputs
+#   2. Runs OPA naming-convention + quota-governance policy checks
+#   3. Logs in to the target subscription (hub × tier environment)
+#   4. Deploys infra/modules/foundry-project/main.bicep as a child of the
+#      existing Foundry account
+#   5. Assigns custom RBAC roles to Project Admin (group) and Project Users (group)
+#   6. Posts a deployment summary and closes/labels the issue
+#
+# RBAC isolation:
+#   Project Admin (custom) @ project scope — manage project, NO model deployment
+#   Project User  (custom) @ project scope — inference + agents only
+#
+# Required GitHub Environments:
+#   {hub}-{tier}  e.g. amr-mfs, emea-tax
+#   Each has: AZURE_CLIENT_ID, AZURE_SUBSCRIPTION_ID
+#
+# Required repo/org secrets:
+#   AZURE_TENANT_ID
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      hub:
+        description: "Hub region: amr | emea | apac"
+        required: true
+        type: choice
+        options: [amr, emea, apac]
+      subscription_tier:
+        description: "Target Foundry resource group tier"
+        required: true
+        type: choice
+        options: [mfs, gf-audit, gf-advisory, gf-tax, g9-us, g9-ca, g9-uk, g9-de, g9-fr, g9-nl, g9-au, g9-jp, g9-cn]
+      workload_name:
+        description: "Workload name — lowercase, hyphens only, max 20 chars (e.g. tax-assist)"
+        required: true
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [nonprod, uat, prod]
+        default: nonprod
+      data_classification:
+        description: "Data classification"
+        required: true
+        type: choice
+        options: [public, internal, confidential, restricted]
+        default: internal
+      cost_center:
+        description: "Cost center code for billing chargeback"
+        required: true
+      project_admin_group_oid:
+        description: "Entra ID object ID of the Project Admin group"
+        required: true
+      project_user_group_oid:
+        description: "Entra ID object ID of the Project Users group (leave blank to skip)"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+# ── Job 1: Parse + Validate inputs ────────────────────────────────────────────
+jobs:
+  parse-request:
+    name: Parse Provisioning Request
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'provisioning-approved'))
+    outputs:
+      hub: ${{ steps.parse.outputs.hub }}
+      subscription_tier: ${{ steps.parse.outputs.subscription_tier }}
+      workload_name: ${{ steps.parse.outputs.workload_name }}
+      environment: ${{ steps.parse.outputs.environment }}
+      data_classification: ${{ steps.parse.outputs.data_classification }}
+      cost_center: ${{ steps.parse.outputs.cost_center }}
+      project_admin_group_oid: ${{ steps.parse.outputs.project_admin_group_oid }}
+      project_user_group_oid: ${{ steps.parse.outputs.project_user_group_oid }}
+      project_name: ${{ steps.parse.outputs.project_name }}
+      foundry_account_name: ${{ steps.parse.outputs.foundry_account_name }}
+      foundry_rg: ${{ steps.parse.outputs.foundry_rg }}
+
+    steps:
+      - name: Parse inputs
+        id: parse
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            HUB="${{ github.event.inputs.hub }}"
+            TIER="${{ github.event.inputs.subscription_tier }}"
+            WORKLOAD="${{ github.event.inputs.workload_name }}"
+            ENV="${{ github.event.inputs.environment }}"
+            DATA_CLASS="${{ github.event.inputs.data_classification }}"
+            COST_CENTER="${{ github.event.inputs.cost_center }}"
+            ADMIN_OID="${{ github.event.inputs.project_admin_group_oid }}"
+            USER_OID="${{ github.event.inputs.project_user_group_oid }}"
+          else
+            BODY='${{ github.event.issue.body }}'
+            HUB=$(echo "$BODY" | grep -A1 '### Hub Region' | tail -1 | tr -d '[:space:]')
+            TIER=$(echo "$BODY" | grep -A1 '### Subscription Tier' | tail -1 | tr -d '[:space:]')
+            WORKLOAD=$(echo "$BODY" | grep -A1 '### Workload Name' | tail -1 | tr -d '[:space:]')
+            ENV=$(echo "$BODY" | grep -A1 '### Environment' | tail -1 | tr -d '[:space:]')
+            DATA_CLASS=$(echo "$BODY" | grep -A1 '### Data Classification' | tail -1 | tr -d '[:space:]')
+            COST_CENTER=$(echo "$BODY" | grep -A1 '### Cost Center' | tail -1 | tr -d '[:space:]')
+            ADMIN_OID=$(echo "$BODY" | grep -A1 '### Project Admin Group OID' | tail -1 | tr -d '[:space:]')
+            USER_OID=$(echo "$BODY" | grep -A1 '### Project Users Group OID' | tail -1 | tr -d '[:space:]')
+          fi
+
+          # Validate hub
+          if [[ ! "$HUB" =~ ^(amr|emea|apac)$ ]]; then
+            echo "::error::hub must be amr, emea, or apac (got: '$HUB')"
+            exit 1
+          fi
+
+          # Validate tier
+          VALID_TIERS="mfs|gf-audit|gf-advisory|gf-tax|g9-us|g9-ca|g9-uk|g9-de|g9-fr|g9-nl|g9-au|g9-jp|g9-cn"
+          if [[ ! "$TIER" =~ ^($VALID_TIERS)$ ]]; then
+            echo "::error::subscription_tier must be one of: $VALID_TIERS (got: '$TIER')"
+            exit 1
+          fi
+
+          # Validate workload name — lowercase alphanumeric + hyphens, max 20 chars
+          if [[ ! "$WORKLOAD" =~ ^[a-z0-9][a-z0-9-]{1,19}$ ]]; then
+            echo "::error::workload_name must be lowercase alphanumeric + hyphens, 2-20 chars (got: '$WORKLOAD')"
+            exit 1
+          fi
+
+          # Validate admin OID (basic UUID format check)
+          if [[ ! "$ADMIN_OID" =~ ^[0-9a-f-]{36}$ ]]; then
+            echo "::error::project_admin_group_oid must be a valid Entra ID object ID (UUID format)"
+            exit 1
+          fi
+
+          # Project name convention: {hub}-{tier}-{env}-{workload}
+          PROJECT_NAME="${HUB}-${TIER}-${ENV}-${WORKLOAD}"
+          FOUNDRY_ACCOUNT="foundry-${TIER}-${HUB}"
+          FOUNDRY_RG="rg-agentops-${TIER}-${HUB}"
+
+          echo "hub=${HUB}" >> $GITHUB_OUTPUT
+          echo "subscription_tier=${TIER}" >> $GITHUB_OUTPUT
+          echo "workload_name=${WORKLOAD}" >> $GITHUB_OUTPUT
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "data_classification=${DATA_CLASS}" >> $GITHUB_OUTPUT
+          echo "cost_center=${COST_CENTER}" >> $GITHUB_OUTPUT
+          echo "project_admin_group_oid=${ADMIN_OID}" >> $GITHUB_OUTPUT
+          echo "project_user_group_oid=${USER_OID}" >> $GITHUB_OUTPUT
+          echo "project_name=${PROJECT_NAME}" >> $GITHUB_OUTPUT
+          echo "foundry_account_name=${FOUNDRY_ACCOUNT}" >> $GITHUB_OUTPUT
+          echo "foundry_rg=${FOUNDRY_RG}" >> $GITHUB_OUTPUT
+
+          echo "### Parsed Request" >> $GITHUB_STEP_SUMMARY
+          echo "- **Project**: \`${PROJECT_NAME}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Foundry Account**: \`${FOUNDRY_ACCOUNT}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Hub / Tier**: ${HUB} / ${TIER}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${ENV} | **Data Class**: ${DATA_CLASS}" >> $GITHUB_STEP_SUMMARY
+
+# ── Job 2: OPA Policy Pre-Check ───────────────────────────────────────────────
+  policy-check:
+    name: OPA Policy Pre-Check
+    runs-on: ubuntu-latest
+    needs: parse-request
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OPA
+        run: |
+          curl -sSL -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          chmod +x opa && sudo mv opa /usr/local/bin/opa
+
+      - name: Build OPA input
+        run: |
+          cat > /tmp/opa-input.json << 'EOF'
+          {
+            "project_name": "${{ needs.parse-request.outputs.project_name }}",
+            "hub": "${{ needs.parse-request.outputs.hub }}",
+            "subscription_tier": "${{ needs.parse-request.outputs.subscription_tier }}",
+            "workload_name": "${{ needs.parse-request.outputs.workload_name }}",
+            "environment": "${{ needs.parse-request.outputs.environment }}",
+            "data_classification": "${{ needs.parse-request.outputs.data_classification }}",
+            "foundry_account": "${{ needs.parse-request.outputs.foundry_account_name }}"
+          }
+          EOF
+          cat /tmp/opa-input.json
+
+      - name: Naming convention policy
+        run: |
+          RESULT=$(opa eval \
+            --data policies/opa/naming-convention.rego \
+            --input /tmp/opa-input.json \
+            "data.foundry.naming.allow" \
+            --format raw)
+          if [ "$RESULT" != "true" ]; then
+            echo "::error::Naming convention policy FAILED. Check project_name format."
+            exit 1
+          fi
+          echo "✅ Naming convention policy passed"
+
+      - name: Quota governance policy
+        run: |
+          RESULT=$(opa eval \
+            --data policies/opa/quota-governance.rego \
+            --input /tmp/opa-input.json \
+            "data.foundry.quota.allow" \
+            --format raw)
+          if [ "$RESULT" != "true" ]; then
+            echo "::error::Quota governance policy FAILED. Hub may be at capacity."
+            exit 1
+          fi
+          echo "✅ Quota governance policy passed"
+
+# ── Job 3: Deploy Foundry Project ─────────────────────────────────────────────
+  provision-project:
+    name: Provision Foundry Project
+    runs-on: ubuntu-latest
+    needs: [parse-request, policy-check]
+    environment: ${{ needs.parse-request.outputs.hub }}-${{ needs.parse-request.outputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get custom role resource IDs from subscription
+        id: roles
+        run: |
+          SUB_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          USER_ROLE=$(az role definition list \
+            --name "Foundry Project User" \
+            --query "[0].id" -o tsv 2>/dev/null || echo "")
+          ADMIN_ROLE=$(az role definition list \
+            --name "Foundry Project Admin" \
+            --query "[0].id" -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$USER_ROLE" ] || [ -z "$ADMIN_ROLE" ]; then
+            echo "::error::Custom RBAC roles not found in subscription. Run deploy-hub.yml first."
+            exit 1
+          fi
+
+          echo "user_role_id=$USER_ROLE" >> $GITHUB_OUTPUT
+          echo "admin_role_id=$ADMIN_ROLE" >> $GITHUB_OUTPUT
+
+      - name: Get Log Analytics workspace ID
+        id: law
+        run: |
+          LAW_ID=$(az monitor log-analytics workspace show \
+            --workspace-name "law-foundry-${{ needs.parse-request.outputs.subscription_tier }}-${{ needs.parse-request.outputs.hub }}" \
+            --resource-group "${{ needs.parse-request.outputs.foundry_rg }}" \
+            --query id -o tsv)
+          echo "workspace_id=$LAW_ID" >> $GITHUB_OUTPUT
+
+      - name: Deploy Foundry Project
+        id: deploy
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ needs.parse-request.outputs.foundry_rg }}
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          template: infra/modules/foundry-project/main.bicep
+          parameters: >
+            projectName=${{ needs.parse-request.outputs.project_name }}
+            displayName="${{ needs.parse-request.outputs.workload_name }} (${{ needs.parse-request.outputs.hub }}/${{ needs.parse-request.outputs.subscription_tier }})"
+            workloadDescription="Provisioned project: ${{ needs.parse-request.outputs.workload_name }}"
+            foundryAccountName=${{ needs.parse-request.outputs.foundry_account_name }}
+            hubRegion=${{ needs.parse-request.outputs.hub }}
+            subscriptionTier=${{ needs.parse-request.outputs.subscription_tier }}
+            environment=${{ needs.parse-request.outputs.environment }}
+            dataClassification=${{ needs.parse-request.outputs.data_classification }}
+            costCenter=${{ needs.parse-request.outputs.cost_center }}
+            projectAdminObjectId=${{ needs.parse-request.outputs.project_admin_group_oid }}
+            projectAdminPrincipalType=Group
+            projectUserGroupObjectId=${{ needs.parse-request.outputs.project_user_group_oid }}
+            logAnalyticsWorkspaceId=${{ steps.law.outputs.workspace_id }}
+            foundryProjectAdminRoleId=${{ steps.roles.outputs.admin_role_id }}
+            foundryProjectUserRoleId=${{ steps.roles.outputs.user_role_id }}
+          failOnStdErr: false
+
+      - name: Revoke temporary developer access (prod only)
+        if: needs.parse-request.outputs.environment == 'prod'
+        run: |
+          echo "Prod deployment — removing any 'Azure AI Developer' standing assignments on project..."
+          PROJECT_ID="${{ steps.deploy.outputs.projectId }}"
+          az role assignment list \
+            --scope "$PROJECT_ID" \
+            --query "[?roleDefinitionName=='Azure AI Developer' && principalType=='Group'].id" \
+            -o tsv | xargs -r -I{} az role assignment delete --ids {} 2>/dev/null || true
+
+      - name: Post success comment on issue
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const projectName = '${{ needs.parse-request.outputs.project_name }}';
+            const foundryAccount = '${{ needs.parse-request.outputs.foundry_account_name }}';
+            const hub = '${{ needs.parse-request.outputs.hub }}';
+            const tier = '${{ needs.parse-request.outputs.subscription_tier }}';
+            const env = '${{ needs.parse-request.outputs.environment }}';
+            const endpoint = '${{ steps.deploy.outputs.projectEndpoint }}';
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ✅ Foundry Project Provisioned\n\n` +
+                    `| Field | Value |\n|---|---|\n` +
+                    `| **Project** | \`${projectName}\` |\n` +
+                    `| **Foundry Instance** | \`${foundryAccount}\` |\n` +
+                    `| **Hub / Tier** | ${hub} / ${tier} |\n` +
+                    `| **Environment** | ${env} |\n` +
+                    `| **Project Endpoint** | \`${endpoint}\` |\n\n` +
+                    `### Next steps\n` +
+                    `- Use the project endpoint in your agent code\n` +
+                    `- Models available from the hub approved list — no additional provisioning needed\n` +
+                    `- To add a new model, submit a **model-approval-request** issue\n` +
+                    (env === 'prod' ? '\n> Developer standing access has been revoked (promote-only model).' : '')
+            });
+            await github.rest.issues.update({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              labels: ['provisioned']
+            });
+
+      - name: Deployment summary
+        run: |
+          echo "## Foundry Project Provisioned ✅" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Project Name | \`${{ needs.parse-request.outputs.project_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Foundry Account | \`${{ needs.parse-request.outputs.foundry_account_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Project Endpoint | \`${{ steps.deploy.outputs.projectEndpoint }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Project ID | \`${{ steps.deploy.outputs.projectId }}\` |" >> $GITHUB_STEP_SUMMARY
