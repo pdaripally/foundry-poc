@@ -5,8 +5,8 @@ package foundry.naming
 # Enforces the convention: {hub}-{tier}-{env}-{workload}
 # where:
 #   hub      ∈ {amr, emea, apac}
-#   tier     ∈ {mfs, tax}
-#   env      ∈ {dev, staging, prod}
+#   tier     ∈ {mfs, gf-audit, gf-advisory, gf-tax, g9-us, g9-ca, g9-uk, g9-de, g9-fr, g9-nl, g9-au, g9-jp, g9-cn}
+#   env      ∈ {nonprod, uat, prod}
 #   workload = lowercase alphanumeric + hyphens, 2-20 chars, starts with letter/digit
 
 import future.keywords.if
@@ -27,11 +27,15 @@ valid_hub if {
 }
 
 valid_tier if {
-    input.subscription_tier in {"mfs", "tax"}
+    input.subscription_tier in {
+        "mfs", "gf-audit", "gf-advisory", "gf-tax",
+        "g9-us", "g9-ca", "g9-uk", "g9-de", "g9-fr",
+        "g9-nl", "g9-au", "g9-jp", "g9-cn"
+    }
 }
 
 valid_env if {
-    input.environment in {"dev", "staging", "prod"}
+    input.environment in {"nonprod", "uat", "prod"}
 }
 
 valid_workload if {
@@ -48,13 +52,11 @@ valid_project_name_format if {
     input.project_name == expected
 }
 
-# Foundry account name must match the derived convention
 valid_foundry_account if {
     expected := sprintf("foundry-%v-%v", [input.subscription_tier, input.hub])
     input.foundry_account == expected
 }
 
-# Violations — surfaced as a set for human-readable error messages
 violations contains msg if {
     not valid_hub
     msg := sprintf("hub '%v' is not valid. Must be one of: amr, emea, apac", [input.hub])
@@ -62,12 +64,12 @@ violations contains msg if {
 
 violations contains msg if {
     not valid_tier
-    msg := sprintf("subscription_tier '%v' is not valid. Must be one of: mfs, tax", [input.subscription_tier])
+    msg := sprintf("subscription_tier '%v' is not valid.", [input.subscription_tier])
 }
 
 violations contains msg if {
     not valid_env
-    msg := sprintf("environment '%v' is not valid. Must be one of: dev, staging, prod", [input.environment])
+    msg := sprintf("environment '%v' is not valid. Must be one of: nonprod, uat, prod", [input.environment])
 }
 
 violations contains msg if {
