@@ -1,0 +1,132 @@
+name: Deprovision Foundry Project
+
+# Safely decommissions a Foundry project.
+# Requires dual approval: project admin + platform admin (enforced via GitHub
+# Environment protection rules on the target environment).
+#
+# What this workflow does:
+#   1. Validates the project exists
+#   2. Lists and removes all RBAC role assignments on the project
+#   3. Deletes the Foundry project resource (child of the Foundry account)
+#   4. Retains diagnostic logs in Log Analytics (not deleted)
+#
+# Safety: This workflow does NOT delete the parent Foundry account,
+# shared services (Key Vault, Storage, Cosmos, AI Search), or any VNet resources.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hub:
+        description: "Hub region: amr | emea | apac"
+        required: true
+        type: choice
+        options: [amr, emea, apac]
+      subscription_tier:
+        description: "Subscription tier"
+        required: true
+        type: choice
+        options: [mfs, tax]
+      project_name:
+        description: "Exact project name to deprovision (e.g. amr-mfs-dev-tax-assist)"
+        required: true
+      justification:
+        description: "Decommission justification (logged in audit trail)"
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  safety-check:
+    name: Safety Check — Verify Project Exists
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.hub }}-${{ inputs.subscription_tier }}
+    outputs:
+      project_id: ${{ steps.check.outputs.project_id }}
+      foundry_rg: ${{ steps.check.outputs.foundry_rg }}
+      foundry_account: ${{ steps.check.outputs.foundry_account }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify project exists and capture metadata
+        id: check
+        run: |
+          FOUNDRY_ACCOUNT="foundry-${{ inputs.subscription_tier }}-${{ inputs.hub }}"
+          FOUNDRY_RG="rg-foundry-${{ inputs.subscription_tier }}-${{ inputs.hub }}"
+
+          PROJECT_ID=$(az cognitiveservices account project show \
+            --account-name "$FOUNDRY_ACCOUNT" \
+            --resource-group "$FOUNDRY_RG" \
+            --name "${{ inputs.project_name }}" \
+            --query id -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$PROJECT_ID" ]; then
+            echo "::error::Project '${{ inputs.project_name }}' not found in $FOUNDRY_ACCOUNT / $FOUNDRY_RG"
+            exit 1
+          fi
+
+          echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
+          echo "foundry_rg=$FOUNDRY_RG" >> $GITHUB_OUTPUT
+          echo "foundry_account=$FOUNDRY_ACCOUNT" >> $GITHUB_OUTPUT
+
+          echo "### Project Verified ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- **Project**: \`${{ inputs.project_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Foundry Account**: \`$FOUNDRY_ACCOUNT\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Project ID**: \`$PROJECT_ID\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Justification**: ${{ inputs.justification }}" >> $GITHUB_STEP_SUMMARY
+
+  deprovision:
+    name: Deprovision Project
+    runs-on: ubuntu-latest
+    needs: safety-check
+    environment: ${{ inputs.hub }}-${{ inputs.subscription_tier }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Remove all RBAC assignments on project scope
+        run: |
+          PROJECT_ID="${{ needs.safety-check.outputs.project_id }}"
+          echo "Listing role assignments on $PROJECT_ID..."
+          ASSIGNMENTS=$(az role assignment list \
+            --scope "$PROJECT_ID" \
+            --query "[].id" -o tsv)
+
+          if [ -z "$ASSIGNMENTS" ]; then
+            echo "No role assignments found."
+          else
+            echo "$ASSIGNMENTS" | xargs -r -I{} az role assignment delete --ids {}
+            echo "Removed all role assignments."
+          fi
+
+      - name: Delete Foundry project
+        run: |
+          az cognitiveservices account project delete \
+            --account-name "${{ needs.safety-check.outputs.foundry_account }}" \
+            --resource-group "${{ needs.safety-check.outputs.foundry_rg }}" \
+            --name "${{ inputs.project_name }}" \
+            --yes
+
+      - name: Decommission summary
+        run: |
+          echo "## Foundry Project Deprovisioned ✅" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Project | \`${{ inputs.project_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Foundry Account | \`${{ needs.safety-check.outputs.foundry_account }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Justification | ${{ inputs.justification }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> Log Analytics data is retained per workspace retention policy (90 days prod / 30 days dev)." >> $GITHUB_STEP_SUMMARY

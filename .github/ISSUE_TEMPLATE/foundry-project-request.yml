@@ -1,0 +1,127 @@
+name: Foundry Project Request
+description: Request a new Foundry project to be vended on the AI OS platform
+title: "[Project Request] <workload-name> — <hub>/<tier>"
+labels: ["project-request", "pending-review"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Foundry Project Request
+
+        Complete all fields below. A platform admin will review and apply the `provisioning-approved` label to trigger automated provisioning.
+
+        **Naming convention**: Projects are named `{hub}-{tier}-{env}-{workload}` (e.g. `amr-mfs-prod-tax-assist`).
+
+  - type: dropdown
+    id: hub
+    attributes:
+      label: Hub Region
+      description: Which regional hub should this project be deployed to?
+      options:
+        - amr
+        - emea
+        - apac
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subscription_tier
+    attributes:
+      label: Subscription Tier
+      description: |
+        - **mfs** — Member Firm Shared instance (multi-tenant member firm workloads)
+        - **tax** — Global Function Tax instance (tax domain workloads)
+      options:
+        - mfs
+        - tax
+    validations:
+      required: true
+
+  - type: input
+    id: workload_name
+    attributes:
+      label: Workload Name
+      description: "Short, unique identifier for this workload. Lowercase, hyphens only, max 20 chars."
+      placeholder: "e.g. tax-assist, invoice-review"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - dev
+        - staging
+        - prod
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: data_classification
+    attributes:
+      label: Data Classification
+      description: What is the highest data classification this project will process?
+      options:
+        - public
+        - internal
+        - confidential
+        - restricted
+      default: 1
+    validations:
+      required: true
+
+  - type: input
+    id: cost_center
+    attributes:
+      label: Cost Center
+      description: Cost center code for billing chargeback
+      placeholder: "e.g. 135355"
+    validations:
+      required: true
+
+  - type: input
+    id: project_admin_group_oid
+    attributes:
+      label: Project Admin Group OID
+      description: |
+        Entra ID object ID of the group that will be assigned **Foundry Project Admin** role.
+        This group can manage the project, add users, and run agents — but cannot provision models.
+      placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    validations:
+      required: true
+
+  - type: input
+    id: project_user_group_oid
+    attributes:
+      label: Project Users Group OID
+      description: |
+        Entra ID object ID of the group that will be assigned **Foundry Project User** role.
+        Can run inference, use agents, and run evaluations. Leave blank if not applicable.
+      placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)"
+    validations:
+      required: false
+
+  - type: textarea
+    id: business_justification
+    attributes:
+      label: Business Justification
+      description: Briefly describe the use case and business need for this project.
+      placeholder: "e.g. AI assistant for KPMG Tax advisors to draft client engagement letters using GPT-4o..."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I have reviewed the [Platform Usage Policy](https://github.com/org/repo/blob/main/docs/usage-policy.md) and this workload complies.
+          required: true
+        - label: I understand that model deployment is platform-managed and project users cannot add new models.
+          required: true
+        - label: I confirm the data classification above accurately reflects the data that will be processed.
+          required: true

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "hubRegion": { "value": "apac" },
+    "location": { "value": "southeastasia" },
+    "vnetAddressPrefix": { "value": "10.3.16.0/20" },
+    "peSubnetAddressPrefix": { "value": "10.3.17.0/24" },
+    "vnetInjectionSubnetAddressPrefix": { "value": "10.3.18.0/24" },
+    "costCenter": { "value": "REPLACE_WITH_COST_CENTER" },
+    "environment": { "value": "dev" }
+  }
+}

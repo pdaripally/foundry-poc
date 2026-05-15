@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "hubRegion": { "value": "emea" },
+    "location": { "value": "westeurope" },
+    "vnetAddressPrefix": { "value": "10.2.16.0/20" },
+    "peSubnetAddressPrefix": { "value": "10.2.17.0/24" },
+    "vnetInjectionSubnetAddressPrefix": { "value": "10.2.18.0/24" },
+    "costCenter": { "value": "REPLACE_WITH_COST_CENTER" },
+    "environment": { "value": "dev" }
+  }
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "name": "gpt-4o-amr",
+    "modelName": "gpt-4o",
+    "modelVersion": "2024-11-20",
+    "skuName": "GlobalStandard",
+    "capacity": 50
+  },
+  {
+    "name": "gpt-4o-mini-amr",
+    "modelName": "gpt-4o-mini",
+    "modelVersion": "2024-07-18",
+    "skuName": "GlobalStandard",
+    "capacity": 100
+  },
+  {
+    "name": "text-embedding-3-large-amr",
+    "modelName": "text-embedding-3-large",
+    "modelVersion": "1",
+    "skuName": "Standard",
+    "capacity": 120
+  },
+  {
+    "name": "text-embedding-3-small-amr",
+    "modelName": "text-embedding-3-small",
+    "modelVersion": "1",
+    "skuName": "Standard",
+    "capacity": 240
+  }
+]

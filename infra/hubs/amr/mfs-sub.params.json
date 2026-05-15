@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "hubRegion": { "value": "amr" },
+    "location": { "value": "eastus2" },
+    "vnetAddressPrefix": { "value": "10.1.0.0/16" },
+    "peSubnetAddressPrefix": { "value": "10.1.1.0/24" },
+    "vnetInjectionSubnetAddressPrefix": { "value": "10.1.2.0/24" },
+    "costCenter": { "value": "REPLACE_WITH_COST_CENTER" },
+    "environment": { "value": "dev" }
+  }
+}

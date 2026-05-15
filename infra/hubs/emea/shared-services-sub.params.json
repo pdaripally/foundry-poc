@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "hubRegion": { "value": "emea" },
+    "location": { "value": "westeurope" },
+    "vnetAddressPrefix": { "value": "10.2.32.0/20" },
+    "peSubnetAddressPrefix": { "value": "10.2.33.0/24" },
+    "apimSubnetAddressPrefix": { "value": "10.2.33.128/27" },
+    "entraIdTenantId": { "value": "REPLACE_WITH_TENANT_ID" },
+    "publisherEmail": { "value": "REPLACE_WITH_PUBLISHER_EMAIL" },
+    "publisherName": { "value": "KPMG AI Platform Team" },
+    "apimSkuName": { "value": "Developer" },
+    "apimSkuCapacity": { "value": 1 },
+    "costCenter": { "value": "REPLACE_WITH_COST_CENTER" },
+    "environment": { "value": "dev" }
+  }
+}

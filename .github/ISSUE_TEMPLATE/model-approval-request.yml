@@ -1,0 +1,110 @@
+name: Model Approval Request
+description: Request a new AI model to be added to a hub's approved model list
+title: "[Model Request] <model-name> — <hub>"
+labels: ["model-request", "pending-finops"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Model Approval Request
+
+        Requesting a new model to be added to a regional hub's approved list requires:
+        1. **FinOps approval** (`finops-approved` label) — cost impact assessment
+        2. **Platform admin approval** (`model-approved` label) — capacity + policy review
+
+        Once both labels are applied, the platform admin will update `infra/hubs/{hub}/models.json`
+        and run the `deploy-hub.yml` workflow to deploy the new model deployment to the Foundry account.
+
+  - type: dropdown
+    id: hub
+    attributes:
+      label: Target Hub Region
+      description: Which regional hub should this model be deployed to?
+      options:
+        - amr
+        - emea
+        - apac
+        - all-hubs
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subscription_tier
+    attributes:
+      label: Subscription Tier
+      description: Which Foundry instance(s) should deploy this model?
+      options:
+        - mfs
+        - tax
+        - both
+    validations:
+      required: true
+
+  - type: input
+    id: model_name
+    attributes:
+      label: Model Name
+      description: "Azure OpenAI / AI model name as it appears in the deployment API (e.g. gpt-4o, o3-mini)"
+      placeholder: "e.g. o3-mini"
+    validations:
+      required: true
+
+  - type: input
+    id: model_version
+    attributes:
+      label: Model Version
+      description: "Specific version to deploy (e.g. 2024-11-20)"
+      placeholder: "e.g. 2025-01-31"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sku_name
+    attributes:
+      label: Deployment SKU
+      options:
+        - GlobalStandard
+        - Standard
+        - DataZoneStandard
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: capacity
+    attributes:
+      label: Requested Capacity (TPM in thousands)
+      description: "Requested capacity in thousands of tokens per minute (e.g. 50 = 50K TPM)"
+      placeholder: "e.g. 50"
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case / Justification
+      description: Which project(s) need this model and why? What capability does it add that existing approved models don't cover?
+      placeholder: "e.g. o3-mini is needed for the tax-assist project to handle complex multi-step tax reasoning. gpt-4o is insufficient for structured output accuracy on this task..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: cost_impact
+    attributes:
+      label: Estimated Cost Impact
+      description: Rough estimate of monthly token consumption and expected cost. FinOps team will validate.
+      placeholder: "e.g. ~5M tokens/month at $0.0015/1K input tokens = ~$7.50/month"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I have confirmed the model is available in the target Azure region(s).
+          required: true
+        - label: I understand approval may take 2-5 business days pending FinOps and platform review.
+          required: true

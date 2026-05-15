@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&display=swap");
+
+@layer base {
+  body {
+    @apply bg-kpmg-gray text-kpmg-black antialiased;
+    font-family: "Open Sans", system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  /* ── Form elements ──────────────────────────────────────────────────────── */
+  .form-label {
+    @apply block text-xs font-semibold text-kpmg-black mb-1 uppercase tracking-wide;
+  }
+
+  .form-hint {
+    @apply mt-1 text-xs text-kpmg-gray-dark;
+  }
+
+  .form-input {
+    @apply w-full rounded-lg border border-kpmg-gray-mid bg-white px-3 py-2
+           text-sm text-kpmg-black placeholder-kpmg-gray-dark
+           focus:outline-none focus:ring-2 focus:ring-kpmg-light-blue focus:border-kpmg-light-blue
+           transition-colors;
+  }
+
+  .form-select {
+    @apply w-full rounded-lg border border-kpmg-gray-mid bg-white px-3 py-2
+           text-sm text-kpmg-black
+           focus:outline-none focus:ring-2 focus:ring-kpmg-light-blue focus:border-kpmg-light-blue
+           transition-colors cursor-pointer;
+  }
+
+  .form-textarea {
+    @apply w-full rounded-lg border border-kpmg-gray-mid bg-white px-3 py-2
+           text-sm text-kpmg-black placeholder-kpmg-gray-dark resize-none
+           focus:outline-none focus:ring-2 focus:ring-kpmg-light-blue focus:border-kpmg-light-blue
+           transition-colors;
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-lg bg-kpmg-blue px-4 py-2
+           text-sm font-semibold text-white shadow-sm
+           hover:bg-kpmg-mid-blue active:bg-kpmg-mid-blue
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 rounded-lg border border-kpmg-gray-mid bg-white px-4 py-2
+           text-sm font-semibold text-kpmg-black shadow-sm
+           hover:border-kpmg-blue hover:text-kpmg-blue
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2
+           text-sm font-semibold text-white shadow-sm
+           hover:bg-red-700 active:bg-red-700
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+  }
+
+  /* ── Page headings ──────────────────────────────────────────────────────── */
+  .page-heading {
+    @apply text-xl font-bold text-kpmg-black;
+  }
+
+  .page-subheading {
+    @apply mt-1 text-sm text-kpmg-gray-dark leading-relaxed;
+  }
+
+  /* ── Selection chip (toggle button) ──────────────────────────────────────── */
+  .chip {
+    @apply rounded-full border px-3 py-1 text-xs font-semibold transition-colors cursor-pointer;
+  }
+
+  .chip-active {
+    @apply border-kpmg-blue bg-kpmg-blue text-white;
+  }
+
+  .chip-inactive {
+    @apply border-kpmg-gray-mid text-kpmg-gray-dark hover:border-kpmg-blue hover:text-kpmg-blue;
+  }
+
+  /* ── Selection card (toggle card button) ─────────────────────────────────── */
+  .select-card {
+    @apply rounded-xl border p-4 text-sm transition-all cursor-pointer;
+  }
+
+  .select-card-active {
+    @apply border-kpmg-blue bg-kpmg-pale-blue;
+  }
+
+  .select-card-inactive {
+    @apply border-kpmg-gray-mid bg-white hover:border-kpmg-mid-blue;
+  }
+}

@@ -1,0 +1,282 @@
+name: Deploy Regional Hub
+
+# Deploys all 3 subscriptions for a given regional hub in order:
+#   1. MFS subscription  — Foundry MFS instance + shared services
+#   2. Tax subscription  — Foundry Tax instance + shared services
+#   3. Shared Services   — APIM gateway (uses Foundry endpoints from steps 1 & 2)
+#
+# Authentication: OIDC federated credentials — no long-lived secrets.
+# Each subscription uses a dedicated GitHub Environment with its own
+# AZURE_CLIENT_ID and AZURE_SUBSCRIPTION_ID secrets.
+#
+# Required GitHub Environments (per hub × tier):
+#   amr-mfs, amr-tax, amr-shared
+#   emea-mfs, emea-tax, emea-shared
+#   apac-mfs, apac-tax, apac-shared
+#
+# Required secrets per environment:
+#   AZURE_CLIENT_ID      — Federated OIDC app registration client ID
+#   AZURE_SUBSCRIPTION_ID — Target subscription ID
+#
+# Required org/repo secrets:
+#   AZURE_TENANT_ID      — Common Entra ID tenant ID
+#   APIM_PUBLISHER_EMAIL — Contact email for APIM service
+
+on:
+  workflow_dispatch:
+    inputs:
+      hub:
+        description: "Regional hub to deploy"
+        required: true
+        type: choice
+        options: [amr, emea, apac]
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+      dry_run:
+        description: "Dry run (what-if only, no deployment)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+# ── Job 1: Deploy MFS Subscription ───────────────────────────────────────────
+jobs:
+  deploy-mfs:
+    name: "Deploy MFS [${{ inputs.hub }}]"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.hub }}-mfs
+    outputs:
+      foundry_endpoint: ${{ steps.deploy.outputs.foundryEndpoint }}
+      foundry_principal_id: ${{ steps.deploy.outputs.foundryPrincipalId }}
+      rg_name: ${{ steps.deploy.outputs.rgName }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC — MFS subscription)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Load approved models from hub config
+        id: models
+        run: |
+          MODELS=$(cat infra/hubs/${{ inputs.hub }}/models.json | jq -c .)
+          echo "models=$MODELS" >> $GITHUB_OUTPUT
+
+      - name: Set deployment location
+        id: loc
+        run: |
+          case "${{ inputs.hub }}" in
+            amr)  echo "location=eastus2" >> $GITHUB_OUTPUT ;;
+            emea) echo "location=westeurope" >> $GITHUB_OUTPUT ;;
+            apac) echo "location=southeastasia" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: What-if — MFS subscription
+        if: inputs.dry_run == true
+        run: |
+          az deployment sub what-if \
+            --location ${{ steps.loc.outputs.location }} \
+            --template-file infra/hubs/mfs-sub.bicep \
+            --parameters @infra/hubs/${{ inputs.hub }}/mfs-sub.params.json \
+            --parameters environment=${{ inputs.environment }} \
+            --parameters approvedModelDeployments='${{ steps.models.outputs.models }}'
+
+      - name: Deploy — MFS subscription
+        id: deploy
+        if: inputs.dry_run != true
+        run: |
+          OUTPUT=$(az deployment sub create \
+            --name "deploy-mfs-${{ inputs.hub }}-$(date +%Y%m%d%H%M%S)" \
+            --location ${{ steps.loc.outputs.location }} \
+            --template-file infra/hubs/mfs-sub.bicep \
+            --parameters @infra/hubs/${{ inputs.hub }}/mfs-sub.params.json \
+            --parameters environment=${{ inputs.environment }} \
+            --parameters "approvedModelDeployments=$(cat infra/hubs/${{ inputs.hub }}/models.json)" \
+            --query properties.outputs \
+            --output json)
+
+          echo "foundryEndpoint=$(echo $OUTPUT | jq -r '.foundryEndpoint.value')" >> $GITHUB_OUTPUT
+          echo "foundryPrincipalId=$(echo $OUTPUT | jq -r '.foundryPrincipalId.value')" >> $GITHUB_OUTPUT
+          echo "rgName=$(echo $OUTPUT | jq -r '.rgName.value')" >> $GITHUB_OUTPUT
+          echo "projectUserRoleId=$(echo $OUTPUT | jq -r '.projectUserRoleId.value')" >> $GITHUB_OUTPUT
+          echo "projectAdminRoleId=$(echo $OUTPUT | jq -r '.projectAdminRoleId.value')" >> $GITHUB_OUTPUT
+
+      - name: Summary — MFS deployment
+        if: inputs.dry_run != true
+        run: |
+          echo "### MFS Subscription Deployed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Foundry Endpoint | ${{ steps.deploy.outputs.foundryEndpoint }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource Group | ${{ steps.deploy.outputs.rgName }} |" >> $GITHUB_STEP_SUMMARY
+
+# ── Job 2: Deploy Tax Subscription ───────────────────────────────────────────
+  deploy-tax:
+    name: "Deploy Tax [${{ inputs.hub }}]"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.hub }}-tax
+    outputs:
+      foundry_endpoint: ${{ steps.deploy.outputs.foundryEndpoint }}
+      foundry_principal_id: ${{ steps.deploy.outputs.foundryPrincipalId }}
+      rg_name: ${{ steps.deploy.outputs.rgName }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC — Tax subscription)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set deployment location
+        id: loc
+        run: |
+          case "${{ inputs.hub }}" in
+            amr)  echo "location=eastus2" >> $GITHUB_OUTPUT ;;
+            emea) echo "location=westeurope" >> $GITHUB_OUTPUT ;;
+            apac) echo "location=southeastasia" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: What-if — Tax subscription
+        if: inputs.dry_run == true
+        run: |
+          az deployment sub what-if \
+            --location ${{ steps.loc.outputs.location }} \
+            --template-file infra/hubs/tax-sub.bicep \
+            --parameters @infra/hubs/${{ inputs.hub }}/tax-sub.params.json \
+            --parameters environment=${{ inputs.environment }} \
+            --parameters approvedModelDeployments='${{ steps.models.outputs.models }}'
+
+      - name: Deploy — Tax subscription
+        id: deploy
+        if: inputs.dry_run != true
+        run: |
+          OUTPUT=$(az deployment sub create \
+            --name "deploy-tax-${{ inputs.hub }}-$(date +%Y%m%d%H%M%S)" \
+            --location ${{ steps.loc.outputs.location }} \
+            --template-file infra/hubs/tax-sub.bicep \
+            --parameters @infra/hubs/${{ inputs.hub }}/tax-sub.params.json \
+            --parameters environment=${{ inputs.environment }} \
+            --parameters "approvedModelDeployments=$(cat infra/hubs/${{ inputs.hub }}/models.json)" \
+            --query properties.outputs \
+            --output json)
+
+          echo "foundryEndpoint=$(echo $OUTPUT | jq -r '.foundryEndpoint.value')" >> $GITHUB_OUTPUT
+          echo "foundryPrincipalId=$(echo $OUTPUT | jq -r '.foundryPrincipalId.value')" >> $GITHUB_OUTPUT
+          echo "rgName=$(echo $OUTPUT | jq -r '.rgName.value')" >> $GITHUB_OUTPUT
+
+      - name: Summary — Tax deployment
+        if: inputs.dry_run != true
+        run: |
+          echo "### Tax Subscription Deployed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Foundry Endpoint | ${{ steps.deploy.outputs.foundryEndpoint }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource Group | ${{ steps.deploy.outputs.rgName }} |" >> $GITHUB_STEP_SUMMARY
+
+# ── Job 3: Deploy Shared Services (APIM) ─────────────────────────────────────
+# Runs after MFS and Tax so it can wire up the Foundry backend endpoints.
+  deploy-shared-services:
+    name: "Deploy Shared Services [${{ inputs.hub }}]"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.hub }}-shared
+    needs: [deploy-mfs, deploy-tax]
+    if: inputs.dry_run != true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC — Shared Services subscription)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set deployment location
+        id: loc
+        run: |
+          case "${{ inputs.hub }}" in
+            amr)  echo "location=eastus2" >> $GITHUB_OUTPUT ;;
+            emea) echo "location=westeurope" >> $GITHUB_OUTPUT ;;
+            apac) echo "location=southeastasia" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Deploy — Shared Services subscription
+        id: deploy
+        run: |
+          OUTPUT=$(az deployment sub create \
+            --name "deploy-shared-${{ inputs.hub }}-$(date +%Y%m%d%H%M%S)" \
+            --location ${{ steps.loc.outputs.location }} \
+            --template-file infra/hubs/shared-services-sub.bicep \
+            --parameters @infra/hubs/${{ inputs.hub }}/shared-services-sub.params.json \
+            --parameters environment=${{ inputs.environment }} \
+            --parameters foundryMfsEndpoint="${{ needs.deploy-mfs.outputs.foundry_endpoint }}" \
+            --parameters foundryTaxEndpoint="${{ needs.deploy-tax.outputs.foundry_endpoint }}" \
+            --query properties.outputs \
+            --output json)
+
+          echo "apimGatewayUrl=$(echo $OUTPUT | jq -r '.apimGatewayUrl.value')" >> $GITHUB_OUTPUT
+          echo "apimPrincipalId=$(echo $OUTPUT | jq -r '.apimPrincipalId.value')" >> $GITHUB_OUTPUT
+
+      # Grant APIM managed identity Azure AI User on both Foundry accounts
+      # so it can acquire tokens and forward to the backends.
+      - name: Grant APIM MI → Azure AI User on MFS Foundry
+        env:
+          AZURE_AI_USER_ROLE: bef2f8c4-8176-4b1f-bcfe-42e15a4d4a5d
+        run: |
+          az login --service-principal \
+            --username ${{ secrets.AZURE_CLIENT_ID }} \
+            --tenant ${{ secrets.AZURE_TENANT_ID }} \
+            --federated-token "$(cat $ACTIONS_ID_TOKEN_REQUEST_URL | jq -r .value)" 2>/dev/null || true
+          # Switch to MFS subscription to create role assignment
+          az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID_MFS }}
+          MFS_FOUNDRY_ID=$(az cognitiveservices account show \
+            --name foundry-mfs-${{ inputs.hub }} \
+            --resource-group rg-foundry-mfs-${{ inputs.hub }} \
+            --query id -o tsv)
+          az role assignment create \
+            --assignee-object-id "${{ steps.deploy.outputs.apimPrincipalId }}" \
+            --assignee-principal-type ServicePrincipal \
+            --role "$AZURE_AI_USER_ROLE" \
+            --scope "$MFS_FOUNDRY_ID" \
+            --condition null 2>/dev/null || echo "Role assignment already exists"
+
+      - name: Grant APIM MI → Azure AI User on Tax Foundry
+        env:
+          AZURE_AI_USER_ROLE: bef2f8c4-8176-4b1f-bcfe-42e15a4d4a5d
+        run: |
+          az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID_TAX }}
+          TAX_FOUNDRY_ID=$(az cognitiveservices account show \
+            --name foundry-tax-${{ inputs.hub }} \
+            --resource-group rg-foundry-tax-${{ inputs.hub }} \
+            --query id -o tsv)
+          az role assignment create \
+            --assignee-object-id "${{ steps.deploy.outputs.apimPrincipalId }}" \
+            --assignee-principal-type ServicePrincipal \
+            --role "$AZURE_AI_USER_ROLE" \
+            --scope "$TAX_FOUNDRY_ID" \
+            --condition null 2>/dev/null || echo "Role assignment already exists"
+
+      - name: Summary — Hub deployment complete
+        run: |
+          echo "## ${{ inputs.hub }} Hub Deployed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Subscription | Resource | Endpoint |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| MFS | foundry-mfs-${{ inputs.hub }} | ${{ needs.deploy-mfs.outputs.foundry_endpoint }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tax | foundry-tax-${{ inputs.hub }} | ${{ needs.deploy-tax.outputs.foundry_endpoint }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Shared | APIM Gateway | ${{ steps.deploy.outputs.apimGatewayUrl }} |" >> $GITHUB_STEP_SUMMARY
