@@ -1,8 +1,14 @@
 name: IaC Drift Detection
 
-# Runs Bicep what-if against all regional hub subscriptions daily.
+# Runs Bicep what-if against all deployed resource groups daily.
 # Reports any live infrastructure that deviates from the declared IaC state.
 # Alerts via GitHub issue if drift is detected.
+#
+# Required GitHub Environments (per hub × env):
+#   amr-nonprod, amr-uat, amr-prod
+#   emea-nonprod, emea-uat, emea-prod
+#   apac-nonprod, apac-uat, apac-prod
+# Each environment needs: AZURE_CLIENT_ID, AZURE_SUBSCRIPTION_ID
 
 on:
   schedule:
@@ -15,6 +21,12 @@ on:
         type: choice
         options: ['', amr, emea, apac]
         default: ''
+      environment:
+        description: "Environment to check"
+        required: false
+        type: choice
+        options: [nonprod, uat, prod]
+        default: nonprod
 
 permissions:
   id-token: write
@@ -22,150 +34,158 @@ permissions:
   issues: write
 
 jobs:
-  # Build the hub matrix dynamically based on input (all or specific)
   setup-matrix:
-    name: Setup Hub Matrix
+    name: Setup Matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
+      environment: ${{ steps.build.outputs.environment }}
     steps:
-      - name: Build matrix
+      - name: Build hub matrix
         id: build
         run: |
+          HUBS='["amr","emea","apac"]'
           if [ -n "${{ inputs.hub }}" ]; then
-            MATRIX='{"include":[{"hub":"${{ inputs.hub }}"}]}'
-          else
-            MATRIX='{"include":[{"hub":"amr"},{"hub":"emea"},{"hub":"apac"}]}'
+            HUBS='["${{ inputs.hub }}"]'
           fi
+          MATRIX=$(echo "$HUBS" | jq -c '{include: [.[] as $h | {hub: $h}]}')
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          ENV="${{ inputs.environment }}"
+          echo "environment=${ENV:-nonprod}" >> $GITHUB_OUTPUT
 
-  drift-check-mfs:
-    name: "Drift Check MFS [${{ matrix.hub }}]"
+  drift-check:
+    name: "Drift [${{ matrix.hub }}]"
     runs-on: ubuntu-latest
     needs: setup-matrix
     strategy:
       matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
       fail-fast: false
-    environment: ${{ matrix.hub }}-mfs
+    environment: ${{ matrix.hub }}-${{ needs.setup-matrix.outputs.environment }}
+
     outputs:
-      has_drift: ${{ steps.whatif.outputs.has_drift }}
+      has_drift: ${{ steps.check.outputs.has_drift }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure Login (OIDC — MFS)
+      - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Set location
-        id: loc
+      - name: Read hub config
+        id: cfg
+        run: echo "location=$(cat infra/hubs/${{ matrix.hub }}/config.json | jq -r '.location')" >> $GITHUB_OUTPUT
+
+      - name: Run what-if across all 14 RGs
+        id: check
         run: |
-          case "${{ matrix.hub }}" in
-            amr)  echo "location=eastus2" >> $GITHUB_OUTPUT ;;
-            emea) echo "location=westeurope" >> $GITHUB_OUTPUT ;;
-            apac) echo "location=southeastasia" >> $GITHUB_OUTPUT ;;
-          esac
+          TIERS=(mfs gf-audit gf-advisory gf-tax g9-us g9-ca g9-uk g9-de g9-fr g9-nl g9-au g9-jp g9-cn)
+          ENV="${{ needs.setup-matrix.outputs.environment }}"
+          DRIFT_FOUND=false
+          DRIFT_REPORT=""
 
-      - name: What-if — MFS subscription
-        id: whatif
-        run: |
-          RESULT=$(az deployment sub what-if \
-            --location ${{ steps.loc.outputs.location }} \
-            --template-file infra/hubs/mfs-sub.bicep \
-            --parameters @infra/hubs/${{ matrix.hub }}/mfs-sub.params.json \
-            --parameters "approvedModelDeployments=$(cat infra/hubs/${{ matrix.hub }}/models.json)" \
-            --result-format FullResourcePayloads \
-            --output json 2>&1 || true)
+          for TIER in "${TIERS[@]}"; do
+            RG="rg-agentops-${TIER}-${{ matrix.hub }}"
+            CFG=$(cat infra/hubs/${{ matrix.hub }}/config.json)
+            VNET=$(echo "$CFG" | jq -r ".tiers[\"${TIER}\"].vnet")
+            PE=$(echo "$CFG"   | jq -r ".tiers[\"${TIER}\"].pe")
+            INJECT=$(echo "$CFG" | jq -r ".tiers[\"${TIER}\"].inject")
 
-          CHANGE_COUNT=$(echo "$RESULT" | jq '[.changes[] | select(.changeType != "NoChange")] | length' 2>/dev/null || echo "0")
-          echo "has_drift=$([ "$CHANGE_COUNT" -gt 0 ] && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "change_count=$CHANGE_COUNT" >> $GITHUB_OUTPUT
+            # Skip if RG does not exist yet
+            RG_EXISTS=$(az group exists --name "$RG")
+            if [ "$RG_EXISTS" == "false" ]; then
+              echo "Skipping $RG — not yet deployed"
+              continue
+            fi
 
-          if [ "$CHANGE_COUNT" -gt 0 ]; then
-            echo "### ⚠️ Drift Detected — MFS ${{ matrix.hub }} ($CHANGE_COUNT changes)" >> $GITHUB_STEP_SUMMARY
-            echo '```json' >> $GITHUB_STEP_SUMMARY
-            echo "$RESULT" | jq '[.changes[] | select(.changeType != "NoChange") | {resource: .resourceId, type: .changeType}]' >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ✅ No Drift — MFS ${{ matrix.hub }}" >> $GITHUB_STEP_SUMMARY
+            RESULT=$(az deployment group what-if \
+              --resource-group "$RG" \
+              --template-file infra/hubs/foundry-rg.bicep \
+              --parameters hub=${{ matrix.hub }} \
+                           tier="$TIER" \
+                           location=${{ steps.cfg.outputs.location }} \
+                           vnetAddressPrefix="$VNET" \
+                           peSubnetAddressPrefix="$PE" \
+                           vnetInjectionSubnetAddressPrefix="$INJECT" \
+                           environment="$ENV" \
+                           costCenter="${{ vars.COST_CENTER }}" \
+                           "approvedModelDeployments=$(cat infra/hubs/${{ matrix.hub }}/models.json)" \
+              --output json 2>/dev/null || echo '{"changes":[]}')
+
+            CHANGE_COUNT=$(echo "$RESULT" | jq '[.changes[] | select(.changeType != "NoChange")] | length' 2>/dev/null || echo "0")
+
+            if [ "$CHANGE_COUNT" -gt 0 ]; then
+              DRIFT_FOUND=true
+              DRIFT_REPORT="${DRIFT_REPORT}\n### ${TIER} (${RG})\n\`\`\`\n$(echo "$RESULT" | jq -r '.changes[] | select(.changeType != "NoChange") | "\(.changeType): \(.resourceId)"')\n\`\`\`"
+              echo "::warning::Drift detected in $RG — $CHANGE_COUNT change(s)"
+            else
+              echo "✅ No drift in $RG"
+            fi
+          done
+
+          # Check Shared APIM RG
+          SHARED_RG="rg-agentops-shared-${{ matrix.hub }}"
+          SHARED_EXISTS=$(az group exists --name "$SHARED_RG")
+          if [ "$SHARED_EXISTS" == "true" ]; then
+            SHARED_CFG=$(cat infra/hubs/${{ matrix.hub }}/config.json)
+            SHARED_VNET=$(echo "$SHARED_CFG" | jq -r '.tiers.shared.vnet')
+            SHARED_PE=$(echo "$SHARED_CFG"   | jq -r '.tiers.shared.pe')
+            SHARED_RESULT=$(az deployment group what-if \
+              --resource-group "$SHARED_RG" \
+              --template-file infra/hubs/shared-rg.bicep \
+              --parameters hub=${{ matrix.hub }} \
+                           location=${{ steps.cfg.outputs.location }} \
+                           environment="$ENV" \
+                           costCenter="${{ vars.COST_CENTER }}" \
+                           entraIdTenantId=${{ secrets.AZURE_TENANT_ID }} \
+                           publisherEmail="${{ secrets.APIM_PUBLISHER_EMAIL }}" \
+                           foundryBackends='[]' \
+              --output json 2>/dev/null || echo '{"changes":[]}')
+
+            SHARED_CHANGES=$(echo "$SHARED_RESULT" | jq '[.changes[] | select(.changeType != "NoChange")] | length' 2>/dev/null || echo "0")
+            if [ "$SHARED_CHANGES" -gt 0 ]; then
+              DRIFT_FOUND=true
+              DRIFT_REPORT="${DRIFT_REPORT}\n### shared (${SHARED_RG})\nAPIM drift detected — $SHARED_CHANGES change(s)"
+            fi
           fi
 
-  drift-check-tax:
-    name: "Drift Check Tax [${{ matrix.hub }}]"
-    runs-on: ubuntu-latest
-    needs: setup-matrix
-    strategy:
-      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
-      fail-fast: false
-    environment: ${{ matrix.hub }}-tax
+          echo "has_drift=$DRIFT_FOUND" >> $GITHUB_OUTPUT
+          echo "drift_report<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DRIFT_REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Azure Login (OIDC — Tax)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Set location
-        id: loc
-        run: |
-          case "${{ matrix.hub }}" in
-            amr)  echo "location=eastus2" >> $GITHUB_OUTPUT ;;
-            emea) echo "location=westeurope" >> $GITHUB_OUTPUT ;;
-            apac) echo "location=southeastasia" >> $GITHUB_OUTPUT ;;
-          esac
-
-      - name: What-if — Tax subscription
-        run: |
-          RESULT=$(az deployment sub what-if \
-            --location ${{ steps.loc.outputs.location }} \
-            --template-file infra/hubs/tax-sub.bicep \
-            --parameters @infra/hubs/${{ matrix.hub }}/tax-sub.params.json \
-            --parameters "approvedModelDeployments=$(cat infra/hubs/${{ matrix.hub }}/models.json)" \
-            --result-format FullResourcePayloads \
-            --output json 2>&1 || true)
-
-          CHANGE_COUNT=$(echo "$RESULT" | jq '[.changes[] | select(.changeType != "NoChange")] | length' 2>/dev/null || echo "0")
-          if [ "$CHANGE_COUNT" -gt 0 ]; then
-            echo "### ⚠️ Drift Detected — Tax ${{ matrix.hub }} ($CHANGE_COUNT changes)" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ✅ No Drift — Tax ${{ matrix.hub }}" >> $GITHUB_STEP_SUMMARY
-          fi
-
-  alert-on-drift:
-    name: Alert on Drift
-    runs-on: ubuntu-latest
-    needs: [drift-check-mfs, drift-check-tax]
-    if: always()
-
-    steps:
       - name: Open drift alert issue
-        if: needs.drift-check-mfs.outputs.has_drift == 'true'
+        if: steps.check.outputs.has_drift == 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            const today = new Date().toISOString().split('T')[0];
-            const title = `[Drift Alert] Infrastructure drift detected — ${today}`;
-            const issues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: 'drift-alert',
-              state: 'open'
+            const today = new Date().toISOString().slice(0, 10);
+            const hub   = '${{ matrix.hub }}';
+            const env   = '${{ needs.setup-matrix.outputs.environment }}';
+            const title = `[Drift Alert] ${hub} ${env} — ${today}`;
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              labels: 'drift-alert', state: 'open',
             });
-            // Avoid duplicate issues for same day
-            const existing = issues.data.find(i => i.title === title);
-            if (!existing) {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title,
-                body: `## Infrastructure Drift Detected\n\nAutomated drift detection found resources that deviate from the declared IaC state.\n\n**Action required**: Review the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) and either:\n1. Run \`deploy-hub.yml\` to reconcile the drift, or\n2. Update the IaC to reflect intentional changes\n\n---\n*Generated by drift-detection workflow — ${ new Date().toISOString() }*`,
-                labels: ['drift-alert', 'platform-ops']
-              });
+            if (existing.data.some(i => i.title === title)) {
+              console.log('Drift issue already open for today — skipping');
+              return;
             }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title,
+              labels: ['drift-alert'],
+              body: `## IaC Drift Detected — ${hub} (${env})\n\n` +
+                    `**Hub:** ${hub} | **Environment:** ${env} | **Date:** ${today}\n\n` +
+                    `The following resource groups deviate from the declared IaC state:\n\n` +
+                    `${{ steps.check.outputs.drift_report }}\n\n` +
+                    `### Resolution\n` +
+                    `1. Review the [workflow run logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n` +
+                    `2. Either re-deploy the affected RGs to reconcile, or update the Bicep to reflect intentional changes\n` +
+                    `3. Close this issue once drift is resolved`,
+            });
