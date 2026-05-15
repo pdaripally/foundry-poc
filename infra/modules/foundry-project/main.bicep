@@ -1,4 +1,4 @@
-// Microsoft Foundry V2 — Project Vending Module
+// Microsoft Foundry V2 — Project Provisioning Module
 //
 // Creates a Foundry project (child of an existing Foundry account) with:
 //   - Full workload isolation via custom RBAC roles
@@ -38,7 +38,7 @@ param hubRegion string
 param subscriptionTier string
 
 @description('Target environment')
-@allowed(['dev', 'staging', 'prod'])
+@allowed(['nonprod', 'uat', 'prod'])
 param environment string
 
 @description('Data classification')
