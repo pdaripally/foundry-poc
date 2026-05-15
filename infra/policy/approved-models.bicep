@@ -8,8 +8,8 @@
 //   Belt      — custom RBAC notActions on Project User/Admin roles
 //   Suspenders — this Azure Policy deny effect at the Foundry RG scope
 //
-// Deploy this module scoped to the Foundry resource group (rg-foundry-mfs-{region}
-// or rg-foundry-tax-{region}). The policy definition is created at subscription
+// Deploy this module scoped to the Foundry resource group (rg-agentops-mfs-{region}
+// or rg-agentops-tax-{region}). The policy definition is created at subscription
 // scope in the hub subscription file.
 
 @description('Resource ID of the approved-models policy definition (created at subscription scope)')
