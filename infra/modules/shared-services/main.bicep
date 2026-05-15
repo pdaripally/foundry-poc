@@ -52,8 +52,8 @@ param peSubnetId string = ''
 param costCenter string
 
 @description('Deployment environment')
-@allowed(['prod', 'staging', 'dev'])
-param environment string = 'prod'
+@allowed(['prod', 'uat', 'nonprod'])
+param environment string = 'nonprod'
 
 var tags = {
   HubRegion: hubRegion
