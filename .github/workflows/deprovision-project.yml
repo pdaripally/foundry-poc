@@ -22,10 +22,10 @@ on:
         type: choice
         options: [amr, emea, apac]
       subscription_tier:
-        description: "Subscription tier"
+        description: "Foundry resource group tier"
         required: true
         type: choice
-        options: [mfs, tax]
+        options: [mfs, gf-audit, gf-advisory, gf-tax, g9-us, g9-ca, g9-uk, g9-de, g9-fr, g9-nl, g9-au, g9-jp, g9-cn]
       project_name:
         description: "Exact project name to deprovision (e.g. amr-mfs-dev-tax-assist)"
         required: true
@@ -41,7 +41,7 @@ jobs:
   safety-check:
     name: Safety Check — Verify Project Exists
     runs-on: ubuntu-latest
-    environment: ${{ inputs.hub }}-${{ inputs.subscription_tier }}
+    environment: ${{ inputs.hub }}-${{ inputs.environment }}
     outputs:
       project_id: ${{ steps.check.outputs.project_id }}
       foundry_rg: ${{ steps.check.outputs.foundry_rg }}
@@ -59,7 +59,7 @@ jobs:
         id: check
         run: |
           FOUNDRY_ACCOUNT="foundry-${{ inputs.subscription_tier }}-${{ inputs.hub }}"
-          FOUNDRY_RG="rg-foundry-${{ inputs.subscription_tier }}-${{ inputs.hub }}"
+          FOUNDRY_RG="rg-agentops-${{ inputs.subscription_tier }}-${{ inputs.hub }}"
 
           PROJECT_ID=$(az cognitiveservices account project show \
             --account-name "$FOUNDRY_ACCOUNT" \
@@ -86,7 +86,7 @@ jobs:
     name: Deprovision Project
     runs-on: ubuntu-latest
     needs: safety-check
-    environment: ${{ inputs.hub }}-${{ inputs.subscription_tier }}
+    environment: ${{ inputs.hub }}-${{ inputs.environment }}
 
     steps:
       - name: Azure Login (OIDC)
