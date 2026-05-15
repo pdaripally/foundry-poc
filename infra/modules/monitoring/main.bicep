@@ -23,8 +23,8 @@ param retentionDays int = 90
 param costCenter string
 
 @description('Environment')
-@allowed(['prod', 'staging', 'dev'])
-param environment string = 'prod'
+@allowed(['prod', 'uat', 'nonprod'])
+param environment string = 'nonprod'
 
 var tags = {
   HubRegion: hubRegion
