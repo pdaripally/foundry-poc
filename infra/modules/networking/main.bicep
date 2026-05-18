@@ -26,7 +26,7 @@ param location string
 param hubRegion string
 
 @description('Subscription tier this VNet belongs to: mfs | tax | shared')
-@allowed(['mfs', 'tax', 'shared'])
+@allowed(['mfs', 'gf-audit', 'gf-advisory', 'gf-tax', 'g9-us', 'g9-ca', 'g9-uk', 'g9-de', 'g9-fr', 'g9-nl', 'g9-au', 'g9-jp', 'g9-cn', 'shared'])
 param subscriptionTier string
 
 @description('VNet address space — e.g. 10.1.0.0/16')

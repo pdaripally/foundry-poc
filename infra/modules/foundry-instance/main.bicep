@@ -23,7 +23,7 @@ param location string
 param hubRegion string
 
 @description('Subscription tier: mfs | tax')
-@allowed(['mfs', 'tax'])
+@allowed(['mfs', 'gf-audit', 'gf-advisory', 'gf-tax', 'g9-us', 'g9-ca', 'g9-uk', 'g9-de', 'g9-fr', 'g9-nl', 'g9-au', 'g9-jp', 'g9-cn'])
 param subscriptionTier string
 
 @description('Log Analytics workspace resource ID for diagnostics')
