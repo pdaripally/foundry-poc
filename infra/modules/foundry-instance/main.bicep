@@ -43,8 +43,8 @@ param costCenter string
 param dataClassification string = 'Internal'
 
 @description('Deployment environment')
-@allowed(['prod', 'staging', 'dev'])
-param environment string = 'prod'
+@allowed(['prod', 'uat', 'nonprod'])
+param environment string = 'nonprod'
 
 var tags = {
   FoundryInstance: instanceName
