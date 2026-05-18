@@ -25,7 +25,7 @@ export const api = {
   deployHub: (payload: { hub: string; environment: string; dry_run: boolean }) =>
     post<WorkflowDispatchResponse>("/api/workflows/deploy-hub", payload),
 
-  vendProject: (payload: {
+  provisionProject: (payload: {
     hub: string;
     subscription_tier: string;
     workload_name: string;
@@ -34,7 +34,7 @@ export const api = {
     cost_center: string;
     project_admin_group_oid: string;
     project_user_group_oid?: string;
-  }) => post<WorkflowDispatchResponse>("/api/workflows/vend-project", payload),
+  }) => post<WorkflowDispatchResponse>("/api/workflows/provision-project", payload),
 
   deprovisionProject: (payload: {
     hub: string;

@@ -15,7 +15,7 @@ import type { WorkflowRun } from "@/lib/types";
 const actions = [
   {
     title: "Deploy Regional Hub",
-    description: "Provision MFS, Tax, and Shared Services subscriptions for a new regional hub.",
+    description: "Provision 14 resource groups (13 Foundry instances + APIM gateway) for a new regional hub.",
     href: "/deploy-hub",
     icon: Rocket,
     iconBg: "bg-blue-50",
@@ -23,13 +23,13 @@ const actions = [
     workflow: "deploy-hub.yml",
   },
   {
-    title: "Vend Foundry Project",
-    description: "Create an isolated project with Project Admin and Project User RBAC. No model provisioning needed.",
-    href: "/vend-project",
+    title: "Provision Foundry Project",
+    description: "Create an isolated project across any of the 13 Foundry tiers with Project Admin and Project User RBAC.",
+    href: "/provision-project",
     icon: FolderPlus,
     iconBg: "bg-emerald-50",
     iconColor: "text-emerald-700",
-    workflow: "vend-foundry-project.yml",
+    workflow: "provision-foundry-project.yml",
   },
   {
     title: "Deprovision Project",
@@ -92,7 +92,7 @@ export default function DashboardPage() {
           <div className="hidden lg:flex flex-col gap-3 shrink-0">
             {[
               { icon: Globe, label: "3 Regional Hubs", sub: "AMR · EMEA · APAC" },
-              { icon: Layers, label: "3 Subscriptions", sub: "MFS · Tax · Shared" },
+              { icon: Layers, label: "14 Resource Groups", sub: "13 Foundry + 1 APIM per hub" },
               { icon: GitBranch, label: "GitHub Actions", sub: "IaC via Azure Bicep" },
             ].map(({ icon: Icon, label, sub }) => (
               <div key={label} className="flex items-center gap-2.5 rounded-xl bg-white/10 px-4 py-2">
@@ -195,7 +195,7 @@ export default function DashboardPage() {
           { label: "Policy Engine", value: "OPA + Azure Policy" },
           { label: "Auth", value: "OIDC (FWIC)" },
           { label: "Model Governance", value: "Hub-approved list + RBAC notActions" },
-          { label: "Isolation", value: "Project-scoped RBAC, no network seg" },
+          { label: "Isolation", value: "Project-scoped RBAC, single subscription" },
         ].map(({ label, value }) => (
           <div key={label}>
             <p className="text-[9px] font-bold uppercase tracking-widest text-kpmg-gray-dark">{label}</p>

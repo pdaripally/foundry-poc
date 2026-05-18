@@ -12,7 +12,7 @@ import type { WorkflowRun } from "@/lib/types";
 const WORKFLOW_OPTIONS = [
   { value: "", label: "All workflows" },
   { value: "deploy-hub.yml", label: "deploy-hub.yml" },
-  { value: "vend-foundry-project.yml", label: "vend-foundry-project.yml" },
+  { value: "provision-foundry-project.yml", label: "provision-foundry-project.yml" },
   { value: "deprovision-project.yml", label: "deprovision-project.yml" },
   { value: "drift-detection.yml", label: "drift-detection.yml" },
 ];

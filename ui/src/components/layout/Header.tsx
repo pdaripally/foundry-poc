@@ -6,7 +6,7 @@ import { Activity } from "lucide-react";
 const titles: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "Dashboard", subtitle: "AI OS Foundry Vending Platform" },
   "/deploy-hub": { title: "Deploy Regional Hub", subtitle: "Provision all 3 subscriptions for an AMR, EMEA, or APAC hub" },
-  "/vend-project": { title: "Vend Foundry Project", subtitle: "Create a new isolated project with RBAC governance" },
+  "/provision-project": { title: "Provision Foundry Project", subtitle: "Create a new isolated project with RBAC governance" },
   "/deprovision": { title: "Deprovision Project", subtitle: "Safely decommission a Foundry project and its RBAC assignments" },
   "/drift-detection": { title: "Drift Detection", subtitle: "Run IaC what-if analysis across hub subscriptions" },
   "/runs": { title: "Workflow Run History", subtitle: "Real-time status of all GitHub Actions workflow executions" },

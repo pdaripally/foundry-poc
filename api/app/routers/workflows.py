@@ -3,7 +3,7 @@ from typing import Optional
 
 from ..models.requests import (
     DeployHubRequest,
-    VendProjectRequest,
+    ProvisionProjectRequest,
     DeprovisionProjectRequest,
     DriftDetectionRequest,
 )
@@ -30,13 +30,13 @@ async def deploy_hub(payload: DeployHubRequest):
 
 
 @router.post(
-    "/vend-project",
+    "/provision-project",
     response_model=WorkflowDispatchResponse,
-    summary="Vend a new Foundry project with RBAC isolation",
+    summary="Provision a new Foundry project with RBAC isolation",
 )
-async def vend_project(payload: VendProjectRequest):
+async def provision_project(payload: ProvisionProjectRequest):
     return await github.dispatch_workflow(
-        "vend-foundry-project.yml",
+        "provision-foundry-project.yml",
         {
             "hub": payload.hub,
             "subscription_tier": payload.subscription_tier,

@@ -5,7 +5,7 @@ import { Header } from "@/components/layout/Header";
 
 export const metadata: Metadata = {
   title: "KPMG AI OS — Foundry Vending Platform",
-  description: "Administration console for Foundry project vending across AMR, EMEA, and APAC hubs",
+  description: "Administration console for Foundry project provisioning across AMR, EMEA, and APAC hubs",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

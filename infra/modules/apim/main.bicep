@@ -61,9 +61,9 @@ param foundryAudience string = 'https://cognitiveservices.azure.com/'
 @description('Cost center code')
 param costCenter string
 
-@description('Environment: prod | staging | dev')
-@allowed(['prod', 'staging', 'dev'])
-param environment string = 'prod'
+@description('Environment: prod | uat | nonprod')
+@allowed(['prod', 'uat', 'nonprod'])
+param environment string = 'nonprod'
 
 var tags = {
   ApimInstance: apimName
@@ -178,7 +178,7 @@ resource mfsProduct 'Microsoft.ApiManagement/service/products@2023-09-01-preview
   name: 'mfs-foundry'
   properties: {
     displayName: 'MFS Foundry Platform (${hubRegion})'
-    description: 'Access to MFS Shared Foundry instance — project vending and agent hosting'
+    description: 'Access to MFS Shared Foundry instance — project provisioning and agent hosting'
     subscriptionRequired: true
     approvalRequired: true
     state: 'published'
@@ -190,7 +190,7 @@ resource taxProduct 'Microsoft.ApiManagement/service/products@2023-09-01-preview
   name: 'tax-foundry'
   properties: {
     displayName: 'Global Function Tax Foundry (${hubRegion})'
-    description: 'Access to Global Function Tax Foundry instance — project vending and agent hosting'
+    description: 'Access to Global Function Tax Foundry instance — project provisioning and agent hosting'
     subscriptionRequired: true
     approvalRequired: true
     state: 'published'

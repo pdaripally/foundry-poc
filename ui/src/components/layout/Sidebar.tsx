@@ -15,7 +15,7 @@ import {
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/deploy-hub", label: "Deploy Hub", icon: Rocket },
-  { href: "/vend-project", label: "Vend Project", icon: FolderPlus },
+  { href: "/provision-project", label: "Provision Project", icon: FolderPlus },
   { href: "/deprovision", label: "Deprovision", icon: Trash2 },
   { href: "/drift-detection", label: "Drift Detection", icon: ShieldCheck },
   { href: "/runs", label: "Workflow Runs", icon: History },

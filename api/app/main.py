@@ -8,7 +8,7 @@ from .routers import health, workflows
 
 app = FastAPI(
     title="AIOS Foundry Vending — Admin API",
-    description="FastAPI middleware that triggers GitHub Actions workflows for Foundry project vending across AMR, EMEA, and APAC hubs.",
+    description="FastAPI middleware that triggers GitHub Actions workflows for Foundry project provisioning across AMR, EMEA, and APAC hubs.",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",

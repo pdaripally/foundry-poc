@@ -4,15 +4,19 @@ from typing import Literal, Optional
 
 class DeployHubRequest(BaseModel):
     hub: Literal["amr", "emea", "apac"] = Field(..., description="Regional hub to deploy")
-    environment: Literal["dev", "staging", "prod"] = Field("dev", description="Target environment")
+    environment: Literal["nonprod", "uat", "prod"] = Field("nonprod", description="Target environment")
     dry_run: bool = Field(False, description="What-if only — no resources are created")
 
 
-class VendProjectRequest(BaseModel):
+class ProvisionProjectRequest(BaseModel):
     hub: Literal["amr", "emea", "apac"] = Field(..., description="Hub region")
-    subscription_tier: Literal["mfs", "tax"] = Field(..., description="Target Foundry subscription")
+    subscription_tier: Literal[
+        "mfs", "gf-audit", "gf-advisory", "gf-tax",
+        "g9-us", "g9-ca", "g9-uk", "g9-de", "g9-fr",
+        "g9-nl", "g9-au", "g9-jp", "g9-cn"
+    ] = Field(..., description="Target Foundry resource group tier")
     workload_name: str = Field(..., description="Workload name — lowercase alphanumeric + hyphens, max 20 chars")
-    environment: Literal["dev", "staging", "prod"] = Field("dev", description="Target environment")
+    environment: Literal["nonprod", "uat", "prod"] = Field("nonprod", description="Target environment")
     data_classification: Literal["public", "internal", "confidential", "restricted"] = Field(
         "internal", description="Data classification level"
     )
@@ -23,7 +27,11 @@ class VendProjectRequest(BaseModel):
 
 class DeprovisionProjectRequest(BaseModel):
     hub: Literal["amr", "emea", "apac"] = Field(..., description="Hub region")
-    subscription_tier: Literal["mfs", "tax"] = Field(..., description="Subscription tier")
+    subscription_tier: Literal[
+        "mfs", "gf-audit", "gf-advisory", "gf-tax",
+        "g9-us", "g9-ca", "g9-uk", "g9-de", "g9-fr",
+        "g9-nl", "g9-au", "g9-jp", "g9-cn"
+    ] = Field(..., description="Subscription tier")
     project_name: str = Field(..., description="Exact project name to deprovision")
     justification: str = Field(..., description="Decommission justification for audit trail")
 
