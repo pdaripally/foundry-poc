@@ -4,7 +4,7 @@
 // Member Firm Shared (MFS) Foundry subscription in a given regional hub.
 //
 // Deployed resources:
-//   rg-foundry-mfs-{hubRegion}
+//   rg-agentops-mfs-{hubRegion}
 //     Log Analytics workspace + App Insights
 //     Hub VNet (PE subnet + Foundry VNet injection subnet)
 //     Key Vault, Storage, Cosmos DB, AI Search (shared services)
@@ -49,12 +49,12 @@ param approvedModelDeployments array
 param costCenter string
 
 @description('Deployment environment')
-@allowed(['prod', 'staging', 'dev'])
-param environment string = 'prod'
+@allowed(['prod', 'uat', 'nonprod'])
+param environment string = 'nonprod'
 
 // ── Derived names (all deterministic from hubRegion) ──────────────────────────
 
-var rgName = 'rg-foundry-mfs-${hubRegion}'
+var rgName = 'rg-agentops-mfs-${hubRegion}'
 var foundryName = 'foundry-mfs-${hubRegion}'
 var lawName = 'law-foundry-mfs-${hubRegion}'
 var appInsightsName = 'ai-foundry-mfs-${hubRegion}'

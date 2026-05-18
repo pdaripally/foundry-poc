@@ -40,12 +40,12 @@ param approvedModelDeployments array
 param costCenter string
 
 @description('Deployment environment')
-@allowed(['prod', 'staging', 'dev'])
-param environment string = 'prod'
+@allowed(['prod', 'uat', 'nonprod'])
+param environment string = 'nonprod'
 
 // ── Derived names ─────────────────────────────────────────────────────────────
 
-var rgName = 'rg-foundry-tax-${hubRegion}'
+var rgName = 'rg-agentops-tax-${hubRegion}'
 var foundryName = 'foundry-tax-${hubRegion}'
 var lawName = 'law-foundry-tax-${hubRegion}'
 var appInsightsName = 'ai-foundry-tax-${hubRegion}'

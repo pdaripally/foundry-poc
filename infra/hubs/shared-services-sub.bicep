@@ -67,12 +67,12 @@ param apimSkuCapacity int = 1
 param costCenter string
 
 @description('Deployment environment')
-@allowed(['prod', 'staging', 'dev'])
-param environment string = 'prod'
+@allowed(['prod', 'uat', 'nonprod'])
+param environment string = 'nonprod'
 
 // ── Derived names ─────────────────────────────────────────────────────────────
 
-var rgName = 'rg-foundry-shared-${hubRegion}'
+var rgName = 'rg-agentops-shared-${hubRegion}'
 var apimName = 'apim-foundry-${hubRegion}'
 var lawName = 'law-foundry-shared-${hubRegion}'
 var appInsightsName = 'ai-foundry-shared-${hubRegion}'
