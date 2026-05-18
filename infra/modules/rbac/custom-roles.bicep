@@ -9,13 +9,7 @@
 //                           (settings, connections, member access). Still CANNOT
 //                           provision/delete model deployments.
 //
-// Model deployment governance is enforced via:
-//   1. notActions on both custom roles (belt)
-//   2. Azure Policy deny effect in infra/policy/deny-model-provisioning.json (suspenders)
-//
-// Assign roles at Foundry PROJECT scope, not at account scope.
-// The project managed identity gets Azure AI User at account scope separately
-// so it can reach model deployments during agent execution.
+// Data actions verified against az provider operation show --namespace Microsoft.CognitiveServices
 
 targetScope = 'subscription'
 
@@ -40,32 +34,43 @@ resource foundryProjectUserRole 'Microsoft.Authorization/roleDefinitions@2022-04
           'Microsoft.Insights/*/read'
         ]
         notActions: [
-          // Model deployment governance — project users can never deploy new models
           'Microsoft.CognitiveServices/accounts/deployments/write'
           'Microsoft.CognitiveServices/accounts/deployments/delete'
-          // Prevent account-level mutations
           'Microsoft.CognitiveServices/accounts/write'
           'Microsoft.CognitiveServices/accounts/delete'
-          // Prevent deleting other projects
           'Microsoft.CognitiveServices/accounts/projects/delete'
         ]
         dataActions: [
-          // Agents — create, run, manage tools within project scope
-          'Microsoft.CognitiveServices/accounts/AIServices/agents/*'
+          // Agents — create, run, manage within project scope
+          'Microsoft.CognitiveServices/accounts/AIServices/agents/read'
+          'Microsoft.CognitiveServices/accounts/AIServices/agents/write'
+          'Microsoft.CognitiveServices/accounts/AIServices/agents/delete'
           // Evaluations — run quality assessments within project scope
-          'Microsoft.CognitiveServices/accounts/AIServices/evaluations/*'
-          // Model inference via project endpoint
-          'Microsoft.CognitiveServices/accounts/AIServices/inference/*'
+          'Microsoft.CognitiveServices/accounts/AIServices/evaluations/read'
+          'Microsoft.CognitiveServices/accounts/AIServices/evaluations/write'
+          'Microsoft.CognitiveServices/accounts/AIServices/evaluations/delete'
+          // Inference via AIServices unified endpoint
+          'Microsoft.CognitiveServices/accounts/AIServices/providers/action'
+          'Microsoft.CognitiveServices/accounts/AIServices/applications/invoke/action'
+          // Responses API (stateful inference)
+          'Microsoft.CognitiveServices/accounts/AIServices/responses/read'
+          'Microsoft.CognitiveServices/accounts/AIServices/responses/write'
+          'Microsoft.CognitiveServices/accounts/AIServices/responses/delete'
           // OpenAI-compatible inference endpoints
           'Microsoft.CognitiveServices/accounts/OpenAI/deployments/chat/completions/action'
           'Microsoft.CognitiveServices/accounts/OpenAI/deployments/completions/action'
           'Microsoft.CognitiveServices/accounts/OpenAI/deployments/embeddings/action'
           'Microsoft.CognitiveServices/accounts/OpenAI/deployments/extensions/chat/completions/action'
-          'Microsoft.CognitiveServices/accounts/OpenAI/deployments/images/generations/action'
-          // File operations within project
-          'Microsoft.CognitiveServices/accounts/AIServices/files/read'
-          'Microsoft.CognitiveServices/accounts/AIServices/files/write'
-          'Microsoft.CognitiveServices/accounts/AIServices/files/delete'
+          'Microsoft.CognitiveServices/accounts/OpenAI/deployments/audio/action'
+          'Microsoft.CognitiveServices/accounts/OpenAI/deployments/realtime/action'
+          'Microsoft.CognitiveServices/accounts/OpenAI/images/generations/action'
+          'Microsoft.CognitiveServices/accounts/OpenAI/responses/read'
+          'Microsoft.CognitiveServices/accounts/OpenAI/responses/write'
+          'Microsoft.CognitiveServices/accounts/OpenAI/responses/delete'
+          // Files for assistant/agent tool use
+          'Microsoft.CognitiveServices/accounts/OpenAI/files/read'
+          'Microsoft.CognitiveServices/accounts/OpenAI/files/write'
+          'Microsoft.CognitiveServices/accounts/OpenAI/files/delete'
         ]
         notDataActions: []
       }
@@ -87,13 +92,10 @@ resource foundryProjectAdminRole 'Microsoft.Authorization/roleDefinitions@2022-0
       {
         actions: [
           'Microsoft.CognitiveServices/*/read'
-          // Project lifecycle management
           'Microsoft.CognitiveServices/accounts/projects/write'
-          // Connection management within project
           'Microsoft.CognitiveServices/accounts/projects/connections/read'
           'Microsoft.CognitiveServices/accounts/projects/connections/write'
           'Microsoft.CognitiveServices/accounts/projects/connections/delete'
-          // Role assignments — allows Project Admin to assign Foundry Project User to others
           'Microsoft.Authorization/roleAssignments/write'
           'Microsoft.Authorization/roleAssignments/delete'
           'Microsoft.Authorization/*/read'
@@ -102,28 +104,45 @@ resource foundryProjectAdminRole 'Microsoft.Authorization/roleDefinitions@2022-0
           'Microsoft.Insights/*/read'
         ]
         notActions: [
-          // Model deployment governance — project admins can never deploy new models
           'Microsoft.CognitiveServices/accounts/deployments/write'
           'Microsoft.CognitiveServices/accounts/deployments/delete'
-          // Prevent account-level mutations
           'Microsoft.CognitiveServices/accounts/write'
           'Microsoft.CognitiveServices/accounts/delete'
         ]
         dataActions: [
-          // All inference + agent + evaluation data actions (superset of Project User)
-          'Microsoft.CognitiveServices/accounts/AIServices/agents/*'
-          'Microsoft.CognitiveServices/accounts/AIServices/evaluations/*'
-          'Microsoft.CognitiveServices/accounts/AIServices/inference/*'
+          // All Project User data actions
+          'Microsoft.CognitiveServices/accounts/AIServices/agents/read'
+          'Microsoft.CognitiveServices/accounts/AIServices/agents/write'
+          'Microsoft.CognitiveServices/accounts/AIServices/agents/delete'
+          'Microsoft.CognitiveServices/accounts/AIServices/evaluations/read'
+          'Microsoft.CognitiveServices/accounts/AIServices/evaluations/write'
+          'Microsoft.CognitiveServices/accounts/AIServices/evaluations/delete'
+          'Microsoft.CognitiveServices/accounts/AIServices/providers/action'
+          'Microsoft.CognitiveServices/accounts/AIServices/applications/invoke/action'
+          'Microsoft.CognitiveServices/accounts/AIServices/responses/read'
+          'Microsoft.CognitiveServices/accounts/AIServices/responses/write'
+          'Microsoft.CognitiveServices/accounts/AIServices/responses/delete'
           'Microsoft.CognitiveServices/accounts/OpenAI/deployments/chat/completions/action'
           'Microsoft.CognitiveServices/accounts/OpenAI/deployments/completions/action'
           'Microsoft.CognitiveServices/accounts/OpenAI/deployments/embeddings/action'
           'Microsoft.CognitiveServices/accounts/OpenAI/deployments/extensions/chat/completions/action'
-          'Microsoft.CognitiveServices/accounts/OpenAI/deployments/images/generations/action'
-          'Microsoft.CognitiveServices/accounts/AIServices/files/read'
-          'Microsoft.CognitiveServices/accounts/AIServices/files/write'
-          'Microsoft.CognitiveServices/accounts/AIServices/files/delete'
-          // Admin extras — trace and monitoring data
-          'Microsoft.CognitiveServices/accounts/AIServices/traces/*'
+          'Microsoft.CognitiveServices/accounts/OpenAI/deployments/audio/action'
+          'Microsoft.CognitiveServices/accounts/OpenAI/deployments/realtime/action'
+          'Microsoft.CognitiveServices/accounts/OpenAI/images/generations/action'
+          'Microsoft.CognitiveServices/accounts/OpenAI/responses/read'
+          'Microsoft.CognitiveServices/accounts/OpenAI/responses/write'
+          'Microsoft.CognitiveServices/accounts/OpenAI/responses/delete'
+          'Microsoft.CognitiveServices/accounts/OpenAI/files/read'
+          'Microsoft.CognitiveServices/accounts/OpenAI/files/write'
+          'Microsoft.CognitiveServices/accounts/OpenAI/files/delete'
+          // Admin extras — assets, fine-tuning, connections, traces
+          'Microsoft.CognitiveServices/accounts/AIServices/assets/read'
+          'Microsoft.CognitiveServices/accounts/AIServices/assets/write'
+          'Microsoft.CognitiveServices/accounts/AIServices/assets/delete'
+          'Microsoft.CognitiveServices/accounts/AIServices/fine_tuning/read'
+          'Microsoft.CognitiveServices/accounts/AIServices/fine_tuning/write'
+          'Microsoft.CognitiveServices/accounts/AIServices/fine_tuning/delete'
+          'Microsoft.CognitiveServices/accounts/AIServices/connections/read'
         ]
         notDataActions: []
       }

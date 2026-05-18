@@ -98,8 +98,8 @@ resource kvDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview
   scope: keyVault
   properties: {
     workspaceId: logAnalyticsWorkspaceId
-    logs: [{ categoryGroup: 'allLogs'; enabled: true }]
-    metrics: [{ category: 'AllMetrics'; enabled: true }]
+    logs: [{ categoryGroup: 'allLogs', enabled: true }]
+    metrics: [{ category: 'AllMetrics', enabled: true }]
   }
 }
 
@@ -231,8 +231,8 @@ resource cosmosDbDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-p
   scope: cosmosDb
   properties: {
     workspaceId: logAnalyticsWorkspaceId
-    logs: [{ categoryGroup: 'allLogs'; enabled: true }]
-    metrics: [{ category: 'Requests'; enabled: true }]
+    logs: [{ categoryGroup: 'allLogs', enabled: true }]
+    metrics: [{ category: 'Requests', enabled: true }]
   }
 }
 
@@ -265,8 +265,8 @@ resource aiSearchDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-p
   scope: aiSearch
   properties: {
     workspaceId: logAnalyticsWorkspaceId
-    logs: [{ categoryGroup: 'allLogs'; enabled: true }]
-    metrics: [{ category: 'AllMetrics'; enabled: true }]
+    logs: [{ categoryGroup: 'allLogs', enabled: true }]
+    metrics: [{ category: 'AllMetrics', enabled: true }]
   }
 }
 
