@@ -70,14 +70,6 @@ var searchName     = 'search-foundry-${tier}-${hub}'
 
 var approvedModelNames = map(approvedModelDeployments, m => m.modelName)
 
-var tags = {
-  HubRegion          : hub
-  FoundryTier        : tier
-  ManagedBy          : 'foundry-platform'
-  Environment        : environment
-  CostCenter         : costCenter
-}
-
 // ── Monitoring ────────────────────────────────────────────────────────────────
 module monitoring '../modules/monitoring/main.bicep' = {
   name: 'deploy-monitoring-${tier}-${hub}'

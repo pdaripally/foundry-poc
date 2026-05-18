@@ -325,11 +325,11 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
   properties: {
     workspaceId: logAnalyticsWorkspaceId
     logs: [
-      { category: 'GatewayLogs'; enabled: true }
-      { category: 'WebSocketConnectionLogs'; enabled: false }
+      { category: 'GatewayLogs', enabled: true }
+      { category: 'WebSocketConnectionLogs', enabled: false }
     ]
     metrics: [
-      { category: 'AllMetrics'; enabled: true }
+      { category: 'AllMetrics', enabled: true }
     ]
   }
 }

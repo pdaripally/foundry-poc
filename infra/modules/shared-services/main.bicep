@@ -152,7 +152,7 @@ resource storageDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-pr
   scope: storageAccount
   properties: {
     workspaceId: logAnalyticsWorkspaceId
-    metrics: [{ category: 'Transaction'; enabled: true }]
+    metrics: [{ category: 'Transaction', enabled: true }]
   }
 }
 

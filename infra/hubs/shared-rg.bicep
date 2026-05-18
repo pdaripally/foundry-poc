@@ -201,8 +201,8 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
   scope: apimService
   properties: {
     workspaceId: monitoring.outputs.workspaceId
-    logs: [{ category: 'GatewayLogs'; enabled: true }]
-    metrics: [{ category: 'AllMetrics'; enabled: true }]
+    logs: [{ category: 'GatewayLogs', enabled: true }]
+    metrics: [{ category: 'AllMetrics', enabled: true }]
   }
 }
 

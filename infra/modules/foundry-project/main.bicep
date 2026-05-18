@@ -115,7 +115,7 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
       }
     ]
     metrics: [
-      { category: 'AllMetrics'; enabled: true }
+      { category: 'AllMetrics', enabled: true }
     ]
   }
 }
