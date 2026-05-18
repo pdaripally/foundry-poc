@@ -94,10 +94,7 @@ jobs:
         if: inputs.dry_run != true
         run: |
           MODELS=$(cat infra/hubs/${{ inputs.hub }}/models.json | jq -c '[.[].modelName]')
-          az deployment sub create \
-            --name "policy-${{ matrix.tier }}-${{ inputs.hub }}-$(date +%Y%m%d%H%M%S)" \
-            --location "${{ steps.cfg.outputs.location }}" \
-            --template-file - <<BICEP
+          cat > /tmp/policy-${{ matrix.tier }}.bicep << BICEP
           targetScope = 'subscription'
           resource approvedModelsPolicy 'Microsoft.Authorization/policyDefinitions@2021-06-01' = {
             name: 'foundry-approved-models-${{ matrix.tier }}-${{ inputs.hub }}'
@@ -116,7 +113,11 @@ jobs:
             }
           }
           BICEP
-          ) 2>/dev/null || true
+          az deployment sub create \
+            --name "policy-${{ matrix.tier }}-${{ inputs.hub }}-$(date +%Y%m%d%H%M%S)" \
+            --location "${{ steps.cfg.outputs.location }}" \
+            --template-file /tmp/policy-${{ matrix.tier }}.bicep \
+            --output none 2>/dev/null || true
 
       - name: What-if — ${{ matrix.tier }} RG
         if: inputs.dry_run == true
