@@ -85,7 +85,7 @@ jobs:
         run: |
           az group create \
             --name rg-agentops-${{ matrix.tier }}-${{ inputs.hub }} \
-            --location ${{ steps.cfg.outputs.location }} \
+            --location "${{ steps.cfg.outputs.location }}" \
             --tags HubRegion=${{ inputs.hub }} FoundryTier=${{ matrix.tier }} \
                    ManagedBy=foundry-platform Environment=${{ inputs.environment }} \
             --output none
@@ -96,7 +96,7 @@ jobs:
           MODELS=$(cat infra/hubs/${{ inputs.hub }}/models.json | jq -c '[.[].modelName]')
           az deployment sub create \
             --name "policy-${{ matrix.tier }}-${{ inputs.hub }}-$(date +%Y%m%d%H%M%S)" \
-            --location ${{ steps.cfg.outputs.location }} \
+            --location "${{ steps.cfg.outputs.location }}" \
             --template-file - <<BICEP
           targetScope = 'subscription'
           resource approvedModelsPolicy 'Microsoft.Authorization/policyDefinitions@2021-06-01' = {
@@ -187,7 +187,7 @@ jobs:
         run: |
           az deployment sub create \
             --name "rbac-${{ inputs.hub }}-$(date +%Y%m%d%H%M%S)" \
-            --location ${{ steps.cfg.outputs.location }} \
+            --location "${{ steps.cfg.outputs.location }}" \
             --template-file infra/modules/rbac/custom-roles.bicep \
             --output none
 
@@ -243,7 +243,7 @@ jobs:
         run: |
           az group create \
             --name rg-agentops-shared-${{ inputs.hub }} \
-            --location ${{ steps.cfg.outputs.location }} \
+            --location "${{ steps.cfg.outputs.location }}" \
             --tags HubRegion=${{ inputs.hub }} FoundryTier=shared \
                    ManagedBy=foundry-platform Environment=${{ inputs.environment }} \
             --output none
